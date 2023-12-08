@@ -32,5 +32,4 @@ jobs:
         uses: shalzz/zola-deploy-action@v0.17.2-1
         env:
           BUILD_DIR: myblog
-          PAGES_BRANCH: gh-pages
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
