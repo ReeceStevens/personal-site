@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+<meta content="IE=edge" http-equiv="X-UA-Compatible"/>
+<meta content="text/html; charset=UTF-8" http-equiv="content-type"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<meta name="robots" content="index, follow">
+
+
+
+
+
+
+
+
+
+
+<title>Testing in Nepal</title>
+
+
+
+<meta name="title" content="Testing in Nepal">
+
+
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://reecestevens.me/blog/freepulse-going-to-nepal/">
+
+<meta property="og:site_name" content="">
+
+
+<meta property="og:title" content="Testing in Nepal">
+
+
+
+
+
+<link rel="canonical" href="https://reecestevens.me/blog/freepulse-going-to-nepal/">
+
+
+
+
+<link rel="stylesheet" href="https://reecestevens.me/css/style.css"/>
+
+<script src="https://reecestevens.me/js/script.js" defer></script>
+
+
+</head>
+<body>
+    <div class="wrapper">
+      <header>
+          
+
+  
+
+
+  <nav class="navBar">
+    
+      <a href="&#x2F;" class="">
+        
+        &#x2F;home&#x2F;
+      </a>
+    
+      <a href="&#x2F;blog" class="">
+        
+        &#x2F;blog&#x2F;
+      </a>
+    
+
+  <div class="themeSwitch">
+    
+    <button class="themeButton light" onclick="setTheme('light')" title="Light mode"><svg class="icons icons__background"><use href="https://reecestevens.me/icons.svg#lightMode"></use></svg></button>
+    <button class="themeButton dark" onclick="setTheme('dark')" title="Dark mode"><svg class="icons icons__background"><use href="https://reecestevens.me/icons.svg#darkMode"></use></svg></button>
+
+    
+  </div>
+</nav>
+
+
+      </header>
+      <main>
+          
+<div><a href="..">..</a>/<span class="metaData">freepulse-going-to-nepal</span></div>
+<time datetime="2016-12-28">Published on: <span class="metaData">2016-12-28</span></time>
+
+<h1>Testing in Nepal</h1>
+
+
+
+<p>It's been quite some time since I last gave an update on FreePulse, but for a
+good reason: I've been working around the clock to prepare for the first round
+of in-hospital tests in Nepal!</p>
+<img src="https://github.com/ReeceStevens/freepulse/raw/master/resources/prototype.jpg" alt="FreePulse System" style="width: 100%;">
+<h2 id="what-we-ve-done-so-far">What We've Done So Far</h2>
+<p>The GoFundMe for FreePulse received a humbling and overwhelming response this
+summer, raising $1000 more than the projected goal. This generosity allowed me
+to push forward prototyping the fully functional model of FreePulse, which led
+to steady improvements in the design as well as a steady increase in the amount
+of wires sprawled out across my desk.</p>
+<img src="/images/messy_wires.JPG" alt="Messy Wires" style="width: 100%;">
+<p>There were four major areas of improvement that version 1 of FreePulse
+entailed, so I'll give a quick overview of the work that was done over the
+latter part of 2016. Each of these topics could be a blog post in their own
+right, and I aim to expand on them in more detail in the future.</p>
+<h3 id="improvements-to-the-software">Improvements to the Software</h3>
+<p>The software of FreePulse was completely revamped during the summer to
+use a new modular, sandbox-like approach to displaying graphical elements like
+signal traces and buttons. You can check out much of the progress on that front
+in <a href="https://github.com/ReeceStevens/freepulse/pull/16">this PR</a> (and on that note, you can always be up-to-date on
+the latest software progress by checking out the <a href="https://github.com/ReeceStevens/freepulse">FreePulse GitHub
+page</a>!). More work is still to be done here, but these
+modifications have laid the groundwork for expanding FreePulse's capabilities
+to display many different kinds of modules and signals.</p>
+<h3 id="addition-of-pulse-oximetery">Addition of Pulse Oximetery</h3>
+<p>Using a sophisticated and efficient analog front-end chip from TI, a low-cost
+and hardware-efficient pulse oximeter module was added to FreePulse. This
+module accepts a standard DB-9 port probe, meaning it is compatible with a wide
+array of existing pulse oximeter clips.</p>
+<img src="/images/pulse_ox_dev.JPG" alt="Pulse Ox" style="width: 100%;">
+<p>The software algorithms for calculating percent oxygen content are all
+available on the GitHub page. These algorithms were determined empirically by
+testing against gold-standard reference pulse oximeters and fine-tuning
+calibration parameters.</p>
+<h3 id="addition-of-semi-automatic-blood-pressure-measurement">Addition of Semi-Automatic Blood Pressure Measurement</h3>
+<p>Using a standard connection hose that will fit virtually any existing blood
+pressure cuff, the non-invasive blood pressure (NIBP) unit was built to provide
+simple blood pressure measurements at minimal cost and complexity. I added a DC
+control valve and pressure sensor to control the release and detection of
+pressure fluctuations in the cuff, and the extraction of pulse rate and blood
+pressure were performed in software. What this means for the user is that in
+order to take someone's blood pressure, you simply have to hit &quot;Start&quot; and pump
+the cuff up to 200 mmHg with a hand pump. After the cuff is inflated, the
+deflation and pressure detection is completely automated, making it a very
+hands-off procedure.</p>
+<img src="/images/nibp_circuit.JPG" alt="NIBP System" style="width: 100%;">
+<h3 id="development-of-a-printed-circuit-board">Development of a Printed Circuit Board</h3>
+<p>After spending so much time with this mess of wires on my desk, it was time to
+translate that into a clean printed circuit board (PCB) that would be used in
+the prototype devices. Working with Mrs. Barbara Burcham, an incredibly
+talented (and patient!) PCB layout professional, we designed and revised a
+circuit board that saved as much space as possible while retaining full
+hardware functionality. I'm thrilled with the result, and the biggest testament
+to Mrs. Burcham's talent is that the fully assembled board was able to be
+programmed on the first print! That doesn't happen very often.</p>
+<img src="/images/pcb_flashable.JPG" alt="PCB Flashable" style="width: 100%;">
+<h2 id="preparing-for-the-first-hospital-test">Preparing for the First Hospital Test</h2>
+<p>While improving the technical aspects of FreePulse, I also began working with
+contacts in Nepal to organize on-the-ground tests of FreePulse's capabilities.
+Two organizations played critical roles in supporting this effort: <a href="http://davidkvcs.com">Access
+Health Care</a> and <a href="http://innolitics.com">Innolitics, LLC</a>. In addition to
+this, an incredibly generous donation from Yujan and Mekha Shrestha was the
+final gift that covered the rest of the budget for the proposed test trip. With
+the support of these donors, the testing and evaluation was set for this coming
+winter.</p>
+<p>In preparation for this opportunity, a copious amount of background research
+and testing was performed to ensure safety compliance and hospital readiness.
+I began reaching out to doctors in Nepal and gauging community interest in the
+project, and eventually I determined what hospitals would be optimal fits for
+FreePulse's first on-the-ground test. After determining the hospitals, the full weight
+of effort became preparing a prototype that would be functional both in its
+operation as well as its form factor. I needed a PCB, and I needed a case!</p>
+<img src="/images/microscope_board.jpg" alt="PCB Flashable" style="width: 100%;">
+<img src="/images/pcb_assy.jpg" alt="PCB Flashable" style="width: 100%;">
+<p>For the former, I used the PCB design that Mrs. Burcham and I were developing
+and fabricated it using <a href="https://oshpark.com">OshPark</a>, a community-driven PCB
+manufacturing site. I then modeled a case for the monitor in Solidworks and
+fabricated it using an ABS 3D printer. Although the schedule was tight, two
+functional FreePulse prototypes are now on the ground in Nepal!</p>
+<h2 id="what-we-re-up-to-now">What We're Up To Now</h2>
+<p>Videographer and media guru Madeleine Dunaway and I are on the ground beginning
+our visitation of the three hospitals from which we will be testing FreePulse:
+Amppipal Hospital, Okhaldhunga Community Hospital, and the Annapurna
+Neurological Institute. Our goal is to demonstrate FreePulse's efficacy and
+receive user feedback from doctors and nurses that will guide the development
+of the next iteration of FreePulse. We are thrilled at the opportunity to work
+with the doctors and nurses at these hospitals! We hope to build relationships
+that will help us to better understand what needs are experienced by medical
+professionals in the developing world and how we can design better medical
+equipment to satisfy those needs.</p>
+<p>I will be blogging about our experience here and sharing the lessons we are
+learning, as well as sharing some footage of FreePulse in action in the field.
+Stay tuned here or at the <a href="http://davidkvcs.com">Access Health Care blog</a> to get the latest
+updates as we begin our adventure in Nepal!</p>
+<img src="/images/open_road_nepal.JPG" alt="Open Road Nepal" style="width: 100%;">
+
+
+<p class="tagsData">
+  
+</p>
+
+      </main>
+      <footer>
+          <hr>
+<div class=footContainer>
+  <div class="footLeft">
+    <p>Licensed under <a target="_blank" rel="noopener noreferrer" href="https://fr.wikipedia.org/wiki/Licence_MIT">MIT</a><br>
+      Built with <a target="_blank" rel="noopener noreferrer" href="https://www.getzola.org">Zola</a> using <a target="_blank" rel="noopener noreferrer" href="https://github.com/Speyll/anemone">anemone</a> theme &amp; <a target="_blank" rel="noopener noreferrer" href="https://github.com/Speyll/veqev">veqev</a> colors.<br>
+    </p>
+  </div>
+  
+</div>
+      </footer>
+    </div>
+</body>
+</html>

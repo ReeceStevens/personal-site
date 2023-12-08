@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+<meta content="IE=edge" http-equiv="X-UA-Compatible"/>
+<meta content="text/html; charset=UTF-8" http-equiv="content-type"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<meta name="robots" content="index, follow">
+
+
+
+
+
+
+
+
+
+
+<title>Perspectives on Building a Medical Device with Rust</title>
+
+
+
+<meta name="title" content="Perspectives on Building a Medical Device with Rust">
+
+
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://reecestevens.me/blog/perspectives-on-rust/">
+
+<meta property="og:site_name" content="">
+
+
+<meta property="og:title" content="Perspectives on Building a Medical Device with Rust">
+
+
+
+
+
+<link rel="canonical" href="https://reecestevens.me/blog/perspectives-on-rust/">
+
+
+
+
+<link rel="stylesheet" href="https://reecestevens.me/css/style.css"/>
+
+<script src="https://reecestevens.me/js/script.js" defer></script>
+
+
+</head>
+<body>
+    <div class="wrapper">
+      <header>
+          
+
+  
+
+
+  <nav class="navBar">
+    
+      <a href="&#x2F;" class="">
+        
+        &#x2F;home&#x2F;
+      </a>
+    
+      <a href="&#x2F;blog" class="">
+        
+        &#x2F;blog&#x2F;
+      </a>
+    
+
+  <div class="themeSwitch">
+    
+    <button class="themeButton light" onclick="setTheme('light')" title="Light mode"><svg class="icons icons__background"><use href="https://reecestevens.me/icons.svg#lightMode"></use></svg></button>
+    <button class="themeButton dark" onclick="setTheme('dark')" title="Dark mode"><svg class="icons icons__background"><use href="https://reecestevens.me/icons.svg#darkMode"></use></svg></button>
+
+    
+  </div>
+</nav>
+
+
+      </header>
+      <main>
+          
+<div><a href="..">..</a>/<span class="metaData">perspectives-on-rust</span></div>
+<time datetime="2019-04-24">Published on: <span class="metaData">2019-04-24</span></time>
+
+<h1>Perspectives on Building a Medical Device with Rust</h1>
+
+
+
+<p>During the redesign of FreePulse following the Nepal pre-clinical trials, I
+made the decision to re-write the software in the <a href="https://www.rust-lang.org/">Rust programming
+language</a>. This decision had far-reaching consequences for the
+project, and I wanted to delve a little bit into the motivation for this
+decision, the benefits Rust has provided FreePulse, and my experiences with
+deep-diving into the world of Rust embedded development.</p>
+<p>To be clear: I am <em>not</em> a Rust expert. However, I would make the case that you
+don't <em>have</em> to be a Rust expert in order to take advantage of a lot of the
+benefit that Rust offers as a language. It's not without its warts, but overall
+I feel that the quality, maintanability, and simplicity of the FreePulse
+codebase has significantly improved as a result of the rewrite.</p>
+<h2 id="motivation-for-changing-languages">Motivation for Changing Languages</h2>
+<p>FreePulse was originally written in C++ (the old-repository is open-sourced
+<a href="https://github.com/ReeceStevens/freepulse">here</a>). I used the low-level HAL that was provided with
+the STM32F4 chip in order to interface with the hardware and wrote my own
+wrappers around accessing peripherals such as GPIO, SPI, and USART. From there,
+I built out my application-specific logic as a simple update loop that iterated
+through a set of &quot;modules&quot; (in reality, they were monolithic C++ classes) that
+each provided an <code>.update()</code> method. Unit testing was limited at best.</p>
+<p>Over time, I have learned much more about software best practices and the
+importance of writing maintainable code. There are several design &quot;red-flags&quot; in
+the old code base that made it very difficult to introduce changes without
+breaking things: the monolithic classes were difficult to debug, state was
+spread over multiple places in the code, and control flow was pretty difficult
+to reason about. Perhaps even more importantly, the single-loop style of
+updating meant that there was no way to specify the priority of different
+tasks. The ECG sampler could not measure until the screen was done painting;
+the pulse oximeter calibration would block all UI updates; high priority tasks
+were at the mercy of their slower counterparts, and it was impossible to
+provide timing guarantees on samplers. As the complexity of the software grew,
+these issues become more and more difficult to work around. As a result, I
+decided that FreePulse needed to be re-written to be multi-threaded.</p>
+<p>Of course, &quot;multi-threaded&quot; in an embedded system generally means concurrency
+via interrupt-based programming (<a href="https://stackoverflow.com/questions/1050222/what-is-the-difference-between-concurrency-and-parallelism#1050257">as opposed to
+parallelism</a>, i.e. multiple cores of a CPU
+performing operations simultaneously). Even though the embedded system only has
+a single core processor, we <em>conceptually</em> want the ability to describe
+multiple independent processes that are running simultaneously. In
+interrupt-based programming, we define an &quot;idle&quot; thread that is the lowest
+priority task; we then define a set of other tasks that run at defined
+intervals or in response to hardware events, each with a priority level that
+determines whether it can preempt the currently running task when triggered.
+This model is supported by the hardware in most embedded systems through the
+use of the Nested Vector Interrupt Controller, or NVIC; it allows hardware
+events to trigger execution of certain code hooks. Furthermore, each event has
+a user-configurable priority level, allowing higher-priority events to preempt
+the handling of lower-priority events.</p>
+<p>The mechanisms of multi-threading aside, developing the logic of a
+multi-threaded application is a complex and error-prone task. Even the most
+diligent of engineers can be tripped up by multi-threaded bugs, which often
+manifest themselves in mysterious ways and can be notoriously hard to debug.
+This problem is one of the primary motivators for using the Rust language,
+which provides compile-time guarantees of concurrency safety by the use of its
+borrow checker. This doesn't make concurrent code in Rust completely
+bulletproof, but it does eliminate whole classes of bugs that otherwise would
+be quite difficult to identify and fix.</p>
+<p>Concurrency safety wasn't the only reason for my switch to Rust, though. I want
+to walk through a couple of quick examples where I think Rust really shines in
+the context of FreePulse.</p>
+<h2 id="examples-of-rust-in-freepulse">Examples of Rust in FreePulse</h2>
+<h3 id="pros">Pros</h3>
+<h4 id="hardware-state-described-by-type-state">Hardware State Described By Type State</h4>
+<p>I can't count how many times I've been bitten in development by incorrectly
+initializing a peripheral. This can happen very easily when quickly iterating
+on software or changing how the breadboard is wired during development. A
+sketched-out example in C++ (I have omitted some function definitions and
+intialization for brevity):</p>
+<pre data-lang="cpp" style="background-color:#2b303b;color:#c0c5ce;" class="language-cpp "><code class="language-cpp" data-lang="cpp"><span style="color:#b48ead;">enum </span><span>Pin_Num {
+</span><span>    PA0,
+</span><span>    PA1,
+</span><span>    PA2,
+</span><span>};
+</span><span>
+</span><span>Pin_Num some_gpio_pin = PA1; </span><span style="color:#65737e;">// This is just an enum
+</span><span style="color:#bf616a;">configure_GPIO</span><span>(some_gpio_pin, PULL_DOWN, OUTPUT);
+</span><span>
+</span><span style="color:#b48ead;">int </span><span style="color:#8fa1b3;">analogRead</span><span>(Pin_Num </span><span style="color:#bf616a;">pn</span><span>) {
+</span><span>    uint8_t channel = </span><span style="color:#bf616a;">get_adc_channel</span><span>(pn);
+</span><span>    </span><span style="color:#bf616a;">ADC_RegularChannelConfig</span><span>(ADC1,channel,</span><span style="color:#d08770;">1</span><span>,ADC_SampleTime_144Cycles);
+</span><span>    </span><span style="color:#bf616a;">ADC_SoftwareStartConv</span><span>(ADC1);
+</span><span>    </span><span style="color:#b48ead;">while</span><span>(!</span><span style="color:#bf616a;">ADC_GetFlagStatus</span><span>(ADC1, ADC_FLAG_EOC)) { };
+</span><span>    </span><span style="color:#b48ead;">return </span><span style="color:#bf616a;">ADC_GetConversionValue</span><span>(ADC1);
+</span><span>
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// ...
+</span><span style="color:#65737e;">// Somewhere later on, where I forgot this pin is actually set to be OUTPUT
+</span><span style="color:#bf616a;">analogRead</span><span>(some_gpio_pin); </span><span style="color:#65737e;">// RUNTIME ERROR!
+</span></code></pre>
+<p>In this example, <code>some_gpio_pin</code> is of type <code>Pin_Num</code>, which is simply an enum
+listing the GPIO pins available on the hardware. When we pass in a pin to the
+<code>analogRead</code> function, we know nothing about the pin other than its name; this
+is an issue because <code>analogRead</code> actually will not work unless the GPIO pin has
+been configured as an analog input. We won't discover this issue until runtime,
+when the call to <code>analogRead</code> makes our microcontroller mysteriously crash.</p>
+<p>However, if we can manage to encode the hardware state inside the type of the
+pin, then we can enforce <em>at compile time</em> that we are passing in the correctly
+configured hardware. This is accomplished through the use of type state!</p>
+<p>Type state is not a language-specific solution-- here is a minimal example of
+type state in C++:</p>
+<pre data-lang="cpp" style="background-color:#2b303b;color:#c0c5ce;" class="language-cpp "><code class="language-cpp" data-lang="cpp"><span style="color:#b48ead;">#include </span><span>&lt;</span><span style="color:#a3be8c;">stdio.h</span><span>&gt;
+</span><span>
+</span><span style="color:#b48ead;">template </span><span>&lt;</span><span style="color:#b48ead;">typename</span><span> MODE&gt;
+</span><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">Pin </span><span style="color:#eff1f5;">{
+</span><span style="color:#eff1f5;">    </span><span style="color:#b48ead;">public</span><span style="color:#eff1f5;">:
+</span><span style="color:#eff1f5;">        </span><span style="color:#8fa1b3;">Pin</span><span style="color:#eff1f5;">(</span><span style="color:#b48ead;">int </span><span style="color:#bf616a;">num</span><span style="color:#eff1f5;">): </span><span style="color:#bf616a;">num</span><span style="color:#eff1f5;">(num) {};
+</span><span style="color:#eff1f5;">        </span><span style="color:#b48ead;">int </span><span style="color:#8fa1b3;">get_val </span><span style="color:#eff1f5;">() { </span><span style="color:#b48ead;">return </span><span style="color:#bf616a;">this</span><span style="color:#eff1f5;">-&gt;</span><span style="color:#bf616a;">num</span><span style="color:#eff1f5;">; }
+</span><span style="color:#eff1f5;">        </span><span style="color:#b48ead;">void </span><span style="color:#8fa1b3;">set_val </span><span style="color:#eff1f5;">(</span><span style="color:#b48ead;">int </span><span style="color:#bf616a;">val</span><span style="color:#eff1f5;">) { </span><span style="color:#bf616a;">this</span><span style="color:#eff1f5;">-&gt;</span><span style="color:#bf616a;">num </span><span>=</span><span style="color:#eff1f5;"> val; }
+</span><span style="color:#eff1f5;">    </span><span style="color:#b48ead;">private</span><span style="color:#eff1f5;">:
+</span><span style="color:#eff1f5;">        </span><span style="color:#b48ead;">int</span><span style="color:#eff1f5;"> num;
+</span><span style="color:#eff1f5;">}</span><span>;
+</span><span>
+</span><span style="color:#b48ead;">struct </span><span>Output {};
+</span><span style="color:#b48ead;">struct </span><span>Input {};
+</span><span>
+</span><span style="color:#b48ead;">void </span><span style="color:#8fa1b3;">set_high</span><span>(Pin&lt;Output&gt; </span><span style="color:#bf616a;">pin</span><span>) {
+</span><span>    pin.</span><span style="color:#bf616a;">set_val</span><span>(</span><span style="color:#d08770;">1</span><span>);
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">int </span><span style="color:#8fa1b3;">read</span><span>(Pin&lt;Input&gt; </span><span style="color:#bf616a;">pin</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">return</span><span> pin.</span><span style="color:#bf616a;">get_val</span><span>();
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">int </span><span style="color:#8fa1b3;">main</span><span>(</span><span style="color:#b48ead;">int </span><span style="color:#bf616a;">argc</span><span>, </span><span style="color:#b48ead;">char</span><span>** </span><span style="color:#bf616a;">argv</span><span>) {
+</span><span>    Pin&lt;Output&gt; out_pin = </span><span style="color:#bf616a;">Pin</span><span>&lt;Output&gt;(</span><span style="color:#d08770;">23</span><span>);
+</span><span>    </span><span style="color:#96b5b4;">printf</span><span>(&quot;</span><span style="color:#d08770;">%d</span><span>&quot;, </span><span style="color:#bf616a;">read</span><span>(out_pin));
+</span><span>}
+</span></code></pre>
+<p>Here, we are using a type variable <code>MODE</code> as a <em>phantom type</em>, which simply
+means that it only exists to &quot;mark&quot; the type of an object with some extra
+information. In this case, we are marking the <code>Pin</code> type to indicate whether it
+is an <code>Input</code> or <code>Output</code> pin. The last line of this code snippet passes in an
+output pin to the <code>read</code> function, which is only valid if the pin is configured
+as an input. Since we specified the argument type of <code>read</code> as <code>Pin&lt;Input&gt;</code>, we
+now get this helpful compiler error:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>main.cpp: In function ‘int main(int, char**)’:
+</span><span>main.cpp:26:23: error: could not convert ‘out_pin’ from ‘Pin&lt;Output&gt;’ to ‘Pin&lt;Input&gt;’
+</span><span>     printf(&quot;%d&quot;, read(out_pin));
+</span></code></pre>
+<p>Awesome! We have successfully dodged a mysterious runtime error by catching
+this misconfiguration at compile time. However, there are still a couple of
+things about this approach that are less than optimal. One thing that
+particularly sticks out is that the <code>Pin</code> class has a <code>set_val()</code> method
+defined even if the pin is configured as an input (or <code>get_val()</code> when
+the pin is an output). It would be very useful if we could <em>conditionally</em>
+attach methods to the <code>Pin</code> struct.</p>
+<p>Enter Rust!</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>std::marker::PhantomData;
+</span><span>
+</span><span style="color:#b48ead;">struct </span><span>Input;
+</span><span style="color:#b48ead;">struct </span><span>Output;
+</span><span>
+</span><span style="color:#b48ead;">struct </span><span>Pin&lt;MODE&gt; {
+</span><span>    </span><span style="color:#bf616a;">_mode</span><span>: PhantomData&lt;MODE&gt;,
+</span><span>    </span><span style="color:#bf616a;">num</span><span>: </span><span style="color:#b48ead;">i32</span><span>,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Pin&lt;Output&gt; {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">set_high</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.num = </span><span style="color:#d08770;">1</span><span>;
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Pin&lt;Input&gt; {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">read</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">i32 </span><span>{
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.num
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> in_pin = Pin::&lt;Input&gt;{num: </span><span style="color:#d08770;">42</span><span>, _mode: PhantomData};
+</span><span>    in_pin.</span><span style="color:#96b5b4;">set_high</span><span>();
+</span><span>}
+</span></code></pre>
+<p>With Rust, we can use the <code>impl</code> block to attach methods to the <code>Pin</code> struct
+<em>if the struct satisfies the specified type constraints</em>. In this way, only
+input pins have a <code>read()</code> method, and only output pins have a <code>set_high()</code>
+method. Sure enough, if we try to compile this code, we'll get an error on the
+last line:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>error[E0599]: no method named `set_high` found for type `Pin&lt;Input&gt;` in the current scope
+</span><span>  --&gt; main.rs:25:13
+</span><span>   |
+</span><span>6  | struct Pin&lt;MODE&gt; {
+</span><span>   | ---------------- method `set_high` not found for this
+</span><span>...
+</span><span>25 |     out_pin.set_high();
+</span><span>   |             ^^^^^^^^
+</span><span>
+</span><span>error: aborting due to previous error
+</span><span>
+</span><span>For more information about this error, try `rustc --explain E0599`.
+</span></code></pre>
+<p>So this is great-- we can enforce that pins will only have methods supported by
+the configuration described in their type. But how to enforce that these type
+constraints are valid? This is where Rust's ownership system helps us out.
+We can define constructors for these types that take ownership of a pin,
+performs the appropriate configuration, and returns a new pin type with the
+configuration parameters specified. Because of Rust's ownership system, an old
+reference to a pin that has since been re-configured can no longer be used.
+Here is a slightly modified version of the above example that demonstrates this
+feature:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>std::marker::PhantomData;
+</span><span>
+</span><span style="color:#b48ead;">struct </span><span>Input;
+</span><span style="color:#b48ead;">struct </span><span>Output;
+</span><span>
+</span><span style="color:#b48ead;">struct </span><span>Pin&lt;MODE&gt; {
+</span><span>    </span><span style="color:#bf616a;">_mode</span><span>: PhantomData&lt;MODE&gt;,
+</span><span>    </span><span style="color:#bf616a;">num</span><span>: </span><span style="color:#b48ead;">i32</span><span>,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Pin&lt;Input&gt; {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">read</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">i32 </span><span>{
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.num
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Pin&lt;Output&gt; {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">set_high</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.num = </span><span style="color:#d08770;">1</span><span>;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">into_input</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Pin&lt;Input&gt; {
+</span><span>        </span><span style="color:#65737e;">// reconfigure pin to be an input
+</span><span>        Pin::&lt;Input&gt; { num: </span><span style="color:#bf616a;">self</span><span>.num, _mode: PhantomData }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> out_pin = Pin::&lt;Output&gt;{num: </span><span style="color:#d08770;">42</span><span>, _mode: PhantomData};
+</span><span>    </span><span style="color:#b48ead;">let</span><span> _in_pin = out_pin.</span><span style="color:#96b5b4;">into_input</span><span>();
+</span><span>    out_pin.</span><span style="color:#96b5b4;">set_high</span><span>();
+</span><span>}
+</span></code></pre>
+<p>This code attempts to re-use <code>out_pin</code> after the hardware resource has been
+reconfigured to be an input. However, because the conversion from output to
+input takes <em>ownership</em> of the pin, <code>out_pin</code> is now considered a &quot;moved value&quot;
+and is no longer a valid reference. The compiler helpfully reminds us of this:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>error[E0382]: use of moved value: `out_pin`
+</span><span>  --&gt; main.rs:31:5
+</span><span>   |
+</span><span>30 |     let _in_pin = out_pin.into_input();
+</span><span>   |                   ------- value moved here
+</span><span>31 |     out_pin.set_high();
+</span><span>   |     ^^^^^^^ value used here after move
+</span><span>   |
+</span><span>   = note: move occurs because `out_pin` has type `Pin&lt;Output&gt;`, which does not implement the `Copy` trait
+</span><span>
+</span><span>error: aborting due to previous error
+</span><span>
+</span><span>For more information about this error, try `rustc --explain E0382`.
+</span></code></pre>
+<p>To summarize: Rust's ability to conditionally bind methods with <code>impl</code> blocks
+and its ownership system work together to provide a powerful way to express
+hardware configuration via type state. I've spent a lot of time covering this
+point because it has easily been the biggest quality-of-life improvement since
+switching to Rust for FreePulse's development.</p>
+<h4 id="syntax-features-match-pattern-matching-and-closures">Syntax Features: <code>match</code>, Pattern Matching, and Closures</h4>
+<p>Rust also has some really nice syntax features that make it easy to express
+complex logic in a safe and compiler-checked manner. For instance, here is a
+snippet from the FreePulse SpO2 module displaying Rust's <code>match</code> statement and
+pattern-matching:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">match</span><span> spo2.afe4400.</span><span style="color:#96b5b4;">self_check</span><span>() {
+</span><span>    Ok(()) =&gt; {
+</span><span>        info!(&quot;</span><span style="color:#a3be8c;">SpO2 passed self-check</span><span>&quot;);
+</span><span>        spo2.state = Spo2State::Idle;
+</span><span>    },
+</span><span>    Err(AfeError::SelfCheckFail) =&gt; error!(&quot;</span><span style="color:#a3be8c;">Spo2 failed self-check</span><span>&quot;),
+</span><span>    Err(e) =&gt; {
+</span><span>        error!(&quot;</span><span style="color:#a3be8c;">Communication failure during self check: {:?}.</span><span>&quot;, e);
+</span><span>    }
+</span><span>};
+</span></code></pre>
+<p>Compare this to a roughly equivalent statement in C++:</p>
+<pre data-lang="cpp" style="background-color:#2b303b;color:#c0c5ce;" class="language-cpp "><code class="language-cpp" data-lang="cpp"><span>SomeResultType result = spo2.</span><span style="color:#bf616a;">afe4400</span><span>.</span><span style="color:#bf616a;">self_check</span><span>();
+</span><span style="color:#b48ead;">if </span><span>(</span><span style="color:#bf616a;">is_ok</span><span>(result)) {
+</span><span>    </span><span style="color:#96b5b4;">printf</span><span>(&quot;</span><span style="color:#a3be8c;">SpO2 passed self-check</span><span style="color:#96b5b4;">\n</span><span>&quot;);
+</span><span>    spo2.</span><span style="color:#bf616a;">state </span><span>= Spo2State.</span><span style="color:#bf616a;">Idle</span><span>;
+</span><span>} </span><span style="color:#b48ead;">else if </span><span>(result.</span><span style="color:#bf616a;">error </span><span>== AfeError.</span><span style="color:#bf616a;">SelfCheckFail</span><span>) {
+</span><span>    </span><span style="color:#96b5b4;">printf</span><span>(&quot;</span><span style="color:#a3be8c;">Spo2 failed self-check</span><span style="color:#96b5b4;">\n</span><span>&quot;);
+</span><span>} </span><span style="color:#b48ead;">else </span><span>{
+</span><span>    </span><span style="color:#96b5b4;">printf</span><span>(&quot;</span><span style="color:#a3be8c;">Communication failure during self check</span><span style="color:#96b5b4;">\n</span><span>&quot;);
+</span><span>}
+</span></code></pre>
+<p>Rust <code>match</code> statements are checked by the compiler for exhaustiveness, so if
+the output of <code>spot.afe4400.self_check()</code> changes later on, the compiler will
+throw an error here if there is a new possible output that is not covered in
+the match statement. I also happen to think it just looks clean and concise!</p>
+<p>In addition to <code>match</code>, Rust has first-class support for closures, or anonymous
+functions. This is not unique to Rust (C++ has lambdas, for example); however,
+it is syntactically simple and easy to use. For instance, here is a closure
+that updates the spo2 module after acquiring a lock on the USART1 peripheral:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> spo2 = resources.</span><span style="color:#d08770;">SPO2</span><span>;
+</span><span>resources.</span><span style="color:#d08770;">USART1</span><span>.</span><span style="color:#96b5b4;">lock</span><span>(|</span><span style="color:#bf616a;">usart</span><span>| {
+</span><span>    spo2.</span><span style="color:#96b5b4;">update</span><span>(usart);
+</span><span>});
+</span></code></pre>
+<h4 id="package-management-system">Package Management System</h4>
+<p>Rust provides an excellent package management system via <a href="https://crates.io/">crates.io</a>
+and <code>cargo</code>. This means that third-party dependencies are (a) enumerated and
+(b) version-locked in a controlled format. This is another huge quality-of-life
+improvement, especially for a medical device project-- since dependencies are
+rigorously tracked as part of the project in <code>Cargo.toml</code> and the list is under
+version control, it is much easier to ensure your builds are repeatable. As a
+result of this, it is also much easier to assess risk from dependencies, known
+as &quot;SOUP&quot; (software of unknown providence) in regulatory parlance.</p>
+<h4 id="active-developer-community">Active Developer Community</h4>
+<p>This point cannot be overstated. Rust's developer community is active, engaged,
+and incredibly helpful to newcomers. I have benefitted tremendously from
+hanging around on the #rust-embedded IRC channel, and through the work of
+japaric and the embedded rust workgroup, driver interfaces and standards are
+getting developed at an astonishing pace. The <a href="https://github.com/rust-embedded/embedded-hal"><code>embedded-hal</code></a>
+project is providing a way for drivers to be interoperable with a wide variety
+of microcontrollers; the <a href="https://github.com/rust-embedded/svd2rust">svd2rust</a> library provides mechanisms for
+generating Rust hardware abstraction layers directly from the SVD specification
+of a microcontroller; and that isn't even scratching the surface of the
+<a href="https://github.com/rust-embedded/docs">documentation</a>, <a href="https://github.com/rust-embedded/book">guides</a>, and <a href="https://github.com/japaric/cortex-m-rtfm">high-level
+frameworks</a> that are being actively developed. I have been
+working with embedded Rust for the past two years, and the amount of progress
+made in that time is truly incredible.</p>
+<h3 id="cons">Cons</h3>
+<p>Although I think that switching to Rust has been a substantial win, there are
+still a couple of areas where the switch can make things difficult.</p>
+<h4 id="write-all-your-own-drivers">Write All Your Own Drivers</h4>
+<p>Although this is changing with time, currently 99.9% of devices will not have
+any driver written in Rust. This means that if you are using a new chip, you'll
+need to break out the datasheet and start creating the firmware. It's not all
+bad since this is also a good way to learn about the capabilities of the
+hardware you are using, but it can be tiresome if you are trying to quickly
+test out a possible hardware candidate. It also means that your handwritten
+firmware could possibly contain bugs!</p>
+<p>For projects with a substantial number of interacting systems, this could be a
+significant barrier to using Rust. FreePulse has a relatively small number of
+chips besides the microcontroller that require drivers, so this wasn't enough
+of an inconvenience to outweigh the pros enumerated above.</p>
+<h4 id="devtools-experience-needs-to-improve">Devtools Experience Needs to Improve</h4>
+<p>Compared to the tried-and-true autocomplete, go-to-definition, and other
+IDE-like capabilities that are well supported for C-family languages, Rust's
+developer tooling is still maturing. Autocomplete and go-to-definition work
+<em>some</em> of the time, but they struggle with macros and closures and often do not
+work at all on generated microcontroller crates. It's not clear if there's a
+timeline for this to be improved. I'm keeping my eye on the <a href="https://github.com/rust-lang/rls">Rust Language
+Server</a> project to see if tool improvements are coming down the pipeline!</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>I think the combination of strong compiler checking, expressive type system,
+and concise, elegant syntax make Rust a satisfying language in which to write--
+and an easier language to read as well. FreePulse's migration to Rust has been
+a huge learning experience, and I think the project is much better off as a
+result of it.</p>
+
+
+<p class="tagsData">
+  
+</p>
+
+      </main>
+      <footer>
+          <hr>
+<div class=footContainer>
+  <div class="footLeft">
+    <p>Licensed under <a target="_blank" rel="noopener noreferrer" href="https://fr.wikipedia.org/wiki/Licence_MIT">MIT</a><br>
+      Built with <a target="_blank" rel="noopener noreferrer" href="https://www.getzola.org">Zola</a> using <a target="_blank" rel="noopener noreferrer" href="https://github.com/Speyll/anemone">anemone</a> theme &amp; <a target="_blank" rel="noopener noreferrer" href="https://github.com/Speyll/veqev">veqev</a> colors.<br>
+    </p>
+  </div>
+  
+</div>
+      </footer>
+    </div>
+</body>
+</html>
