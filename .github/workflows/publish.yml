@@ -33,3 +33,4 @@ jobs:
         env:
           BUILD_DIR: myblog
           PAGES_BRANCH: gh-pages
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
