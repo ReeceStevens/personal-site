@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+<meta content="IE=edge" http-equiv="X-UA-Compatible"/>
+<meta content="text/html; charset=UTF-8" http-equiv="content-type"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<meta name="robots" content="index, follow">
+
+
+
+
+
+
+
+
+
+
+<title>Embedded Programming Without the IDE</title>
+
+
+
+<meta name="title" content="Embedded Programming Without the IDE">
+
+
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://reecestevens.me/blog/embedded-programming-without-ide/">
+
+<meta property="og:site_name" content="">
+
+
+<meta property="og:title" content="Embedded Programming Without the IDE">
+
+
+
+
+
+<link rel="canonical" href="https://reecestevens.me/blog/embedded-programming-without-ide/">
+
+
+
+
+<link rel="stylesheet" href="https://reecestevens.me/css/style.css"/>
+
+<script src="https://reecestevens.me/js/script.js" defer></script>
+
+
+</head>
+<body>
+    <div class="wrapper">
+      <header>
+          
+
+  
+
+
+  <nav class="navBar">
+    
+      <a href="&#x2F;" class="">
+        
+        &#x2F;home&#x2F;
+      </a>
+    
+      <a href="&#x2F;blog" class="">
+        
+        &#x2F;blog&#x2F;
+      </a>
+    
+
+  <div class="themeSwitch">
+    
+    <button class="themeButton light" onclick="setTheme('light')" title="Light mode"><svg class="icons icons__background"><use href="https://reecestevens.me/icons.svg#lightMode"></use></svg></button>
+    <button class="themeButton dark" onclick="setTheme('dark')" title="Dark mode"><svg class="icons icons__background"><use href="https://reecestevens.me/icons.svg#darkMode"></use></svg></button>
+
+    
+  </div>
+</nav>
+
+
+      </header>
+      <main>
+          
+<div><a href="..">..</a>/<span class="metaData">embedded-programming-without-ide</span></div>
+<time datetime="2016-07-08">Published on: <span class="metaData">2016-07-08</span></time>
+
+<h1>Embedded Programming Without the IDE</h1>
+
+
+
+<img src="/images/cli_workflow.png" alt="Command Line Workflow" style="width: 100%;">
+<p>There are a few things I should disclose before I get into this post:</p>
+<ol>
+<li>I am a lover of all things terminal.</li>
+<li>I am a big <code>vim</code> enthusiast (although certainly not an expert).</li>
+<li>I love embedded development.</li>
+<li>I really don't love programming in IDEs.</li>
+</ol>
+<p>Unfortunately, for most of my programming education, I believed that statements
+3 and 4 were mutually exclusive. Every embedded project I had worked on
+required the use of Keil uVision, Code Composer, Eclipse... the usual
+suspects. There is nothing inherently wrong with any of these programs, and in
+fact, they significantly lower the barrier to entry for embedded development.
+They're widely used for a reason! </p>
+<p>That said, I was always slightly frustrated when I
+started a project by clicking through a wizard, selecting &quot;Project Template&quot;,
+and seeing a bunch of mysterious files and directories pop up in my workspace.
+What did all that stuff do? Why couldn't I see what was going on? What was all
+this boilerplate code doing in my project, and was all that complexity really
+necessary? When I would express this frustration to teammates, I would often
+get replies like, &quot;Well you can just read the datasheet and program all the
+registers manually if you want. Be my guest!&quot; Teams can be snarky sometimes. </p>
+<p>And so, when I began working on FreePulse, I began researching to see if there
+was a better way. Just before I had given up hope, I came across <a href="https://liviube.wordpress.com/2013/04/22/blink-for-stm32f4-discovery-board-on-linux-with-makefile/">this
+wonderful blog post</a> detailing how the author had built
+a Makefile for a project on the STM32F4 Discovery board. Seeing as I was
+starting my redesign of FreePulse using the same chip, I decided to jump in and
+try to drop Eclipse entirely. I'm really pleased with the result, and hopefully
+this blog post can guide other people who want to develop for embedded
+platforms independent of an IDE.</p>
+<p>I'm going to do a brief overview of <code>make</code>, go through some specifics of how to
+use <code>make</code> to perform most of the useful IDE compilation functions, and show
+how you can integrate that into a very smooth development workflow using only
+<code>vim</code> and the command line. Feel free to skip around if you feel like you've
+got a good handle on how <code>make</code> works!</p>
+<h2 id="introducing-the-makefile">Introducing the Makefile</h2>
+<p>When starting out any coding project, one of the first things I do is try to
+determine the layout of the program in a <code>Makefile</code>. From the people at the
+<a href="https://www.gnu.org/software/make/">Free Software Foundation</a>: </p>
+<blockquote>
+<p>GNU Make is a tool which controls the generation of executables and other 
+non-source files of a program from the program's source files. <a href="https://www.gnu.org/software/make/">1</a> </p>
+</blockquote>
+<p><code>make</code> is pretty awesome. While I'm not going to do an exhaustive tutorial on
+everything you can do with <code>make</code> (partly because that would take too long, and
+partly because I'm still learning more all the time), I'll use it as a tool to
+outline the structure of an embedded program. </p>
+<p>A broad outline of an embedded development project, in <code>Makefile</code> syntax, would
+be:</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#65737e;"># Source Files (all *.c or *.cpp files)
+</span><span style="color:#bf616a;">SRCS  </span><span>= </span><span style="color:#a3be8c;">path/to/my/first/source/file.c
+</span><span style="color:#bf616a;">SRCS </span><span>+= </span><span style="color:#a3be8c;">path/to/my/second/source/file.c
+</span><span style="color:#65737e;"># ...etc
+</span><span>
+</span><span style="color:#65737e;"># Directories containing your header files (all *.h files)
+</span><span style="color:#bf616a;">INC_DIRS  </span><span>= </span><span style="color:#a3be8c;">first/library/with/inc
+</span><span style="color:#bf616a;">INC_DIRS </span><span>+= </span><span style="color:#a3be8c;">second/library/with/inc
+</span><span style="color:#65737e;"># ...etc
+</span><span style="color:#bf616a;">INCLUDE </span><span>= </span><span style="color:#b48ead;">$(</span><span style="color:#96b5b4;">addprefix </span><span style="color:#a3be8c;">-I,</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">INC_DIRS</span><span style="color:#b48ead;">))
+</span><span>
+</span><span style="color:#65737e;"># Any compiler options you need to set
+</span><span style="color:#bf616a;">CFLAGS  </span><span>= </span><span style="color:#a3be8c;">-Wall 
+</span><span style="color:#bf616a;">CFLAGS </span><span>+= </span><span style="color:#a3be8c;">-std=c++11 </span><span style="color:#65737e;"># ...etc 
+</span><span>
+</span><span style="color:#65737e;"># Linker Files (all *.ld files)
+</span><span style="color:#bf616a;">LFLAGS </span><span>= </span><span style="color:#a3be8c;">-Tfirstfile.ld -Tsecondfile.ld
+</span><span>
+</span><span style="color:#65737e;"># Tell make how to compile your *.c files into *.o files 
+</span><span style="color:#bf616a;">%</span><span style="color:#8fa1b3;">.o</span><span>: </span><span style="color:#bf616a;">%</span><span style="color:#a3be8c;">.c
+</span><span>	</span><span style="color:#bf616a;">gcc -c -o $@ $&lt; </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">CFLAGS</span><span style="color:#b48ead;">)
+</span><span>
+</span><span style="color:#65737e;"># Finally, tell make how to build the whole project
+</span><span style="color:#8fa1b3;">final_binary.elf</span><span>: </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">SRCS</span><span style="color:#b48ead;">)
+</span><span>	</span><span style="color:#bf616a;">gcc </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">INCLUDE</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">CFLAGS </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">LFLAGS</span><span style="color:#b48ead;">) </span><span style="color:#bf616a;">$^ -o $@
+</span></code></pre>
+<p>Woah. While that may seem like a lot to take in, I promise that it's actually
+very simple to understand! To break it down:</p>
+<ul>
+<li>
+<p>We declare our source files, indicated by the .c or .cpp file extensions. These 
+hold all the code that makes our awesome application, and it also holds any
+source files required by the device libraries.</p>
+</li>
+<li>
+<p>We declare the folders that are holding all of our include files, indicated
+by the .h file extension. Include files let our separate C/C++ files use
+each others functions by holding function declarations, and you tell the
+compiler what functions you want by the <code>#include &quot;somefile.h&quot;</code> directive.
+It's really important to note (and easy to forget) that <strong>your different
+source files don't automagically know what each other contain.</strong> If it isn't
+declared in the header file and the header file isn't <code>#include</code>d in the
+target file, it won't compile. The <code>addprefix</code> function at the end does just
+what you'd expect, since our compiler needs the little <code>-I</code> flags in front of
+our include directories to know to look there for our stuff.</p>
+</li>
+<li>
+<p>We declare any compiler options, or flags, that are necessary to make the
+final binary file that will be saved in the microcontroller memory. I'll go
+into exactly what flags you should use a little later in this post.</p>
+</li>
+<li>
+<p>We declare all of the linker files, indicated by the .ld file extension, that
+we need to use. Linker files are actually for another program by the people
+at the Free Software Foundation, appropriately called <code>ld</code> (now the file
+extension makes sense). <code>ld</code> is automatically called by <code>gcc</code> or <code>g++</code>, the
+two primary C/C++ compilers, so we don't have to worry about the nitty
+gritty. Basically though, <code>ld</code> helps tell the compiler <em>how</em> our program is
+aligned when it's finally compiled. More on this later.</p>
+</li>
+</ul>
+<p>The last two blocks of this <code>Makefile</code> snippet is where the magic happens. 
+These are rules, which <code>make</code> will use to compile your program. The syntax of
+a rule is:</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#8fa1b3;">target</span><span>: </span><span style="color:#a3be8c;">dependencies
+</span><span>	</span><span style="color:#bf616a;">commands</span><span> to make target from dependencies
+</span></code></pre>
+<p>The first rule is a special kind of rule in <code>make</code> called a <a href="https://www.gnu.org/software/make/manual/html_node/Pattern-Rules.html#Pattern-Rules">pattern
+rule</a>. This rule tells <code>make</code> that if we ever want to make
+an object file (i.e. <code>target = %.o</code>) out of a source file (i.e. <code>dependencies = %.c</code>), we should use the commands specified below by the four-space
+indentation. But what on earth was that command given in the example above?</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#bf616a;">%</span><span style="color:#8fa1b3;">.o</span><span>: </span><span style="color:#bf616a;">%</span><span style="color:#a3be8c;">.c
+</span><span>	</span><span style="color:#bf616a;">gcc -c -o $@ $&lt; </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">CFLAGS</span><span style="color:#b48ead;">)
+</span></code></pre>
+<p>As we've mentioned before, <code>gcc</code> is a compiler; the <code>-c</code> flag specifies that we
+want to compile a source file, and the <code>-o</code> flag says that the next argument
+will be the name of the output file. And that name is... <code>$@</code>?</p>
+<p>Turns out, there's one last little thing about <code>make</code> we need to learn:
+<a href="https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html#Automatic-Variables">automatic variables</a>. You can read the doc page about all the
+different automatic variables that <code>make</code> provides you, but we're going to
+focus on the two that we just used here:</p>
+<ul>
+<li>
+<p><code>$@</code> represents whatever our <code>target</code> is. In this case, <code>$@ == %.o</code>.</p>
+</li>
+<li>
+<p><code>$&lt;</code> represents the <strong>first</strong> dependency to the right of the colon. In this
+case, since only one dependency is listed, <code>$&lt; == %.c</code>. </p>
+</li>
+</ul>
+<p>So, after doing a little translation, we see that the pattern rule is telling
+<code>make</code> that for every source file (<code>%.c</code>) that we want to turn into an object
+file (<code>%.o</code>), it should call our compiler (<code>gcc</code>), tell it to compile (<code>-c</code>)
+our source file (<code>$&lt;</code>) into the output file (<code>-o $@</code>) with some compiler
+options that we specify (<code>$(CFLAGS)</code>). Not too bad! You're already on your way
+to [groking][grok_article] <code>make</code>.</p>
+<p>Finally, we have our last rule, which is where everything comes together. </p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#8fa1b3;">final_binary.elf</span><span>: </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">SRCS</span><span style="color:#b48ead;">)
+</span><span>	</span><span style="color:#bf616a;">gcc </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">INCLUDE</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">CFLAGS</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">LFLAGS</span><span style="color:#b48ead;">) </span><span style="color:#bf616a;">$^ -o $@
+</span></code></pre>
+<p>We've pretty much covered everything in this rule except for the <code>$^</code> variable,
+which is just another <a href="https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html#Automatic-Variables">automatic variable</a>. <code>$^</code> stands for
+<em>every</em> file in the dependencies list, as opposed to <code>$&lt;</code>, which only
+represents the <em>first</em>. A cheesy way to remember that is to look at the
+direction of the arrow! And armed with that last little bit of knowledge, we
+can confidently translate this last rule:</p>
+<p>Take all our source files (<code>$(SRCS)</code>), and make them into a final output binary
+called <code>final_binary.elf</code>. To do that, call our compiler (<code>gcc</code>), tell it where
+our include directories are (<code>$(INCLUDE)</code>), specify our compiler options
+(<code>$(CFLAGS)</code>) and our linker files (<code>$(LFLAGS)</code>), and finally give it all our
+source files (<code>$^</code>) and tell it what we want the output to be (<code>-o $@</code>). </p>
+<p>And just like that, we've outlined the basic build of a C/C++ project!</p>
+<h2 id="make-make-work-for-embedded-programming">Make Make Work for Embedded Programming</h2>
+<p>Because of some of the unique aspects of programming for a microcontroller, we
+need to be a little more explicit with <code>make</code> about some things. This is where
+<a href="https://liviube.wordpress.com/2013/04/22/blink-for-stm32f4-discovery-board-on-linux-with-makefile/">Liviu's blog post</a> really gave me some crucial
+guidance; also, this is where we can see how building a <code>Makefile</code> lets us peek
+into the mystery of what happens when we hit the &quot;compile and run&quot; button on an
+IDE.</p>
+<p>Firstly, we need to specify what kind of compiler we'll use. While you may have
+<code>gcc</code> or <code>g++</code> installed on you machine, they are built to compile programs on 
+your computer architecture. We'll need a special version of <code>gcc</code>, called a
+<em>cross-compiler</em>, so that we can compile across architectures to the ARM
+architecture. You can download it from <a href="https://launchpad.net/gcc-arm-embedded">this site mirror</a>, or
+look for it in a package manager like <code>homebrew</code> (OSX), <code>apt-get</code> (Ubuntu), 
+<code>pacman</code> (for Arch Linux), or similar for your distro. </p>
+<p>Once you've got the cross-compiler toolset installed, the programs will<br />
+probably have really long names (<code>arm-none-eabi-g++</code>, for example). That's
+going to be a pain to type all over your <code>Makefile</code>, so you can make variables
+to hold the path to your tools. I used <code>TOOLS_DIR</code> to hold the path to the
+executables directory in the cross-compiler toolset, and then specified
+the tools I'd be using:</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#bf616a;">CC      </span><span>= </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">TOOLS_DIR</span><span style="color:#b48ead;">)</span><span style="color:#a3be8c;">/arm-none-eabi-g++
+</span><span style="color:#bf616a;">OBJCOPY </span><span>= </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">TOOLS_DIR</span><span style="color:#b48ead;">)</span><span style="color:#a3be8c;">/arm-none-eabi-objcopy
+</span><span style="color:#bf616a;">GDB     </span><span>= </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">TOOLS_DIR</span><span style="color:#b48ead;">)</span><span style="color:#a3be8c;">/arm-none-eabi-gdb
+</span></code></pre>
+<p>Next, we need to specify the <code>CFLAGS</code> that will help us to compile our program.
+Liviu's <code>Makefile</code> was extremely helpful in that it logically grouped the
+flags, so we can get a better idea of what's going on. I'm not going to give an
+exact description of each flag (you can look up the linked docs for that), but I
+will give an overview of each group:</p>
+<ul>
+<li><code>CFLAGS  = -ggdb</code> sets <a href="https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html#Debugging-Options">debugging options</a> so that the compiler will send
+information in a format that <code>gdb</code>, the debugging program we'll be using
+later, can understand. </li>
+<li><code>CFLAGS += -O0</code> tells the compiler to <a href="https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#Optimize-Options">perform no optimizations</a> on the code.
+This is important for using the debugging program <code>gdb</code>. You can increase
+this number later on, but only do so with thorough testing and once you are
+ready to stop using <code>gdb</code>.</li>
+<li><code>CFLAGS += -Wall -Wextra -Warray-bounds</code> all set <a href="https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#Warning-Options">warning options</a>
+so that the compiler will yell at you when certain conditions aren't met by
+your code. Great for catching errors before runtime!</li>
+<li><code>CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m4 -mthumb-interwork</code> all
+tell the compiler <a href="https://gcc.gnu.org/onlinedocs/gcc/Submodel-Options.html#Submodel-Options">machine-dependent options</a>. This is
+information about the ARM processor (i.e. little endian, THUMB ISA, cortex-m4
+cpu, etc.).</li>
+<li><code>CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16</code> tell the compiler more
+machine-dependent options, but these specifically relate to the handling of
+floating point numbers.</li>
+<li><code>CFLAGS += -felide-constructors -std=c++0x</code> all specify <a href="https://gcc.gnu.org/onlinedocs/gcc/C_002b_002b-Dialect-Options.html#C_002b_002b-Dialect-Options">C++ language
+options</a>. These are rules about C++ that the compiler will enforce,
+allowing it to selectively allow or restrict whether some language feature
+will compile. It isn't obvious at first glance what the <code>-felide-constructors</code>
+flag does; however, it allows for a memory optimization during the use of
+copy constructors in C++ (read docs for more info).</li>
+</ul>
+<p>Now that we've gotten the <code>CFLAGS</code> straightened out, we can turn our focus to
+making our life easier when we need to configure the project. The first thing
+we'll want to do is specify our <code>SRC_DIRS</code>, much in the same way we specified
+our <code>INC_DIRS</code>. The benefit to this is that we can then add the following
+commands to our <code>Makefile</code>:</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#b48ead;">vpath</span><span> %.c </span><span style="color:#a3be8c;">$(SRC_DIRS)
+</span><span style="color:#b48ead;">vpath</span><span> %.cpp </span><span style="color:#a3be8c;">$(SRC_DIRS)
+</span></code></pre>
+<p>These commands will tell <code>make</code> to look in these source directories to find any
+source file that it can't find in the current directory. Now, when we specify
+the <code>SRCS</code> variable, we don't have to type out the full path to every source
+file. Instead, we can just list the file name with no path:</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#bf616a;">SRCS  </span><span>= </span><span style="color:#a3be8c;">main.cpp
+</span><span style="color:#bf616a;">SRCS </span><span>+= </span><span style="color:#a3be8c;">other_file.cpp
+</span><span style="color:#bf616a;">SRCS </span><span>+= </span><span style="color:#a3be8c;">other_file_in_other_directory.cpp
+</span></code></pre>
+<p>Finally, we're going to put all this <code>make</code> knowledge to good use and put
+together a few more rules. Now that we have this great <code>Makefile</code> structure,
+making new rules is a breeze:</p>
+<pre data-lang="make" style="background-color:#2b303b;color:#c0c5ce;" class="language-make "><code class="language-make" data-lang="make"><span style="color:#8fa1b3;">.PHONY</span><span>: </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)
+</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>: </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span style="color:#a3be8c;">.elf
+</span><span>
+</span><span style="color:#bf616a;">%</span><span style="color:#8fa1b3;">.o</span><span>: </span><span style="color:#bf616a;">%</span><span style="color:#a3be8c;">.c 
+</span><span>	</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">CC</span><span style="color:#b48ead;">) </span><span style="color:#bf616a;">-c -o $@ $&lt; </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">CFLAGS</span><span style="color:#b48ead;">)
+</span><span>
+</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span style="color:#8fa1b3;">.elf</span><span>: </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">SRCS</span><span style="color:#b48ead;">)
+</span><span>	</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">CC</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">INCLUDE</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">DEFS</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">CFLAGS</span><span style="color:#b48ead;">) $(</span><span style="color:#bf616a;">LFLAGS</span><span style="color:#b48ead;">) </span><span style="color:#bf616a;">$^ -o $@ 
+</span><span>	</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">OBJCOPY</span><span style="color:#b48ead;">) </span><span style="color:#bf616a;">-O</span><span> ihex </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.elf   </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.hex
+</span><span>	</span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">OBJCOPY</span><span style="color:#b48ead;">) </span><span style="color:#bf616a;">-O</span><span> binary </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.elf </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.bin
+</span><span>
+</span><span style="color:#8fa1b3;">clean</span><span>:
+</span><span>	</span><span style="color:#bf616a;">rm -f </span><span>*.o </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.elf </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.hex </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.bin
+</span><span>
+</span><span style="color:#8fa1b3;">flash</span><span>: 
+</span><span>	</span><span style="color:#bf616a;">st-flash</span><span> write </span><span style="color:#b48ead;">$(</span><span style="color:#bf616a;">PROJ_NAME</span><span style="color:#b48ead;">)</span><span>.bin 0x8000000
+</span></code></pre>
+<p>Awesome! Now we've got a powerful suite of <code>make</code> rules. Let's see what we can
+do now:</p>
+<ul>
+<li>
+<p><code>make</code>: Just calling <code>make</code> by itself will trigger the first rule in the
+file. In this case, it just calls our project name, which depends on the
+final binary <code>.elf</code> file. How does <code>make</code> create that file? It looks up a
+rule for it, and a match is found at rule 3! And thus, our program binary is
+built using the compiler options and files we specified previously.</p>
+</li>
+<li>
+<p><code>make clean</code>: This will delete all relevant output files from our workspace.
+Great for making sure you have a clean start when you're rebuilding your
+project.</p>
+</li>
+<li>
+<p><code>make flash</code>: This will call an external program <a href="https://github.com/texane/stlink">st-flash</a> to flash a copy
+of the .elf file with a .bin extension into the microcontroller. <code>0x8000000</code>
+is a STM32F4-specific address where user code is supposed to be loaded.</p>
+</li>
+</ul>
+<p>Using these tools, we have made a master <code>Makefile</code> that does all the heavy
+lifting of getting our sources, include paths, and configurations for ARM 
+straightened out. Now we can focus on coding! Check out the <a href="https://github.com/ReeceStevens/freepulse/blob/master/Makefile">FreePulse
+repository</a> for a real-world example of the Makefile we just 
+outlined. </p>
+<h2 id="coming-soon">Coming Soon...</h2>
+<p>In my next blog post, I'm going to cover how you can use <code>vim</code> and the
+<code>youcompleteme</code> autocompletion engine and syntax checker to build a light and
+powerful coding workspace. Later in that post, I'll also cover how to build a 
+simple command line console logger using the USART interface on the STM32F4.</p>
+<p>Hopefully these posts will serve as useful references for how to begin an
+embedded development project independent of an IDE! Feel free to check out the
+<a href="https://github.com/ReeceStevens/freepulse">FreePulse repository</a> to see code examples of how this is 
+implemented in a project.</p>
+
+
+<p class="tagsData">
+  
+</p>
+
+      </main>
+      <footer>
+          <hr>
+<div class=footContainer>
+  <div class="footLeft">
+    <p>Licensed under <a target="_blank" rel="noopener noreferrer" href="https://fr.wikipedia.org/wiki/Licence_MIT">MIT</a><br>
+      Built with <a target="_blank" rel="noopener noreferrer" href="https://www.getzola.org">Zola</a> using <a target="_blank" rel="noopener noreferrer" href="https://github.com/Speyll/anemone">anemone</a> theme &amp; <a target="_blank" rel="noopener noreferrer" href="https://github.com/Speyll/veqev">veqev</a> colors.<br>
+    </p>
+  </div>
+  
+</div>
+      </footer>
+    </div>
+</body>
+</html>
