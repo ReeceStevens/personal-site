@@ -127,13 +127,13 @@ milestones:
    with an integrated pump (no more manually inflating the cuff)
 
 
-<img src="/images/ecg-breadboard-wires.JPG" alt="10-lead ECG breadboard" style="width: 100%;">
+<img src="/images/ecg-breadboard-wires.JPG" alt="12-lead ECG breadboard" style="width: 100%;">
 
-_The 10-lead ECG system built out on a breadboard. A rat's nest of wires!_
+_The 12-lead ECG system built out on a breadboard. A rat's nest of wires!_
 
 <img src="/images/board-with-spo2-and-ecg.JPG" alt="Board with SpO2 and ECG PCBs" style="width: 100%;">
 
-_FreePulse after moving the 10-lead ECG system and the SpO2 system to dedicated PCBs_
+_FreePulse after moving the 12-lead ECG system and the SpO2 system to dedicated PCBs_
 
 I will dive more into each of these milestones in a separate blog post, since
 there's a lot to be said on each of these topics! Suffice it to say for now,
